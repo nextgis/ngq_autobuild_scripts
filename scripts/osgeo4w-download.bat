@@ -1,0 +1,27 @@
+@echo off
+osgeo4w-setup-x86.exe --local-package-dir .\osgeo4w-env --download ^
+-P expat ^
+-P fcgi ^
+-P grass ^
+-P saga ^
+-P gsl-devel ^
+-P iconv ^
+-P pyqt4 ^
+-P qt4-devel ^
+-P qwt5-devel-qt4 ^
+-P sip ^
+-P gdal ^
+-P gdal-python ^
+-P spatialite ^
+-P libspatialindex-devel ^
+-P python-qscintilla ^
+-P psycopg2 ^
+-P oci ^
+-P osg-dev ^
+-P osg-libs ^
+-P osgearth-dev ^
+-P osgearth-libs ^
+-P zlib-devel ^
+-P libpng-devel ^
+-P libpng-devel-vc ^
+-P msys
