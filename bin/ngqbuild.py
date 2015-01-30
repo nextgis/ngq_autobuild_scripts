@@ -8,16 +8,26 @@ import tempfile
 import subprocess
 import shutil
 
+from ftplib import FTP
+
 ngqbuilder_home_dir = os.environ['NGQBUILDER_HOME']
 ngqbuilder_builds_dir = os.environ['NGQBUILDER_BUILDS_DIR']
 
-config_filename = os.path.join(ngqbuilder_home_dir, "config.ini")
+config_filename = os.path.join(ngqbuilder_home_dir, "projects.ini")
 if not os.path.exists(config_filename):
-	print "ERROR: NGQ Builder config file (%s) not found"%config_filename
-	sys.exit()
+	sys.exit("ERROR: NGQ Builder config file (%s) not found"%config_filename)
 config = ConfigParser.RawConfigParser()
 config.read(config_filename)
 
+def CallExternalApplication(args):
+	try:
+		res = subprocess.call(args, stdout=sys.stdout)
+		if res != 0:
+			sys.exit( "ERROR: Patch file (%s) not found"%patch_filename)
+			
+	except subprocess.CalledProcessError as ex:
+		sys.exit( "ERROR: Patch file (%s) not found"%patch_filename)
+	
 def GetQGISsrc(tag_name, qgis_src_dir):
 	print "=========== \n Get QGIS sources \n tag: %s \n==========="% tag_name
 	
@@ -28,6 +38,7 @@ def GetQGISsrc(tag_name, qgis_src_dir):
 	os.chdir(qgis_src_dir)
 	
 	try:
+		
 		cmd = "git checkout ."
 		print "%s\n"%cmd
 		r = subprocess.call(cmd, stdout=sys.stdout)
@@ -41,7 +52,7 @@ def GetQGISsrc(tag_name, qgis_src_dir):
 		if r != 0:
 			print "ERROR: %s\n"% cmd
 			return None
-		
+
 		cmd = "git checkout master"
 		print "%s\n"% cmd
 		r = subprocess.call(cmd, stdout=sys.stdout)
@@ -62,15 +73,13 @@ def GetQGISsrc(tag_name, qgis_src_dir):
 		if r != 0:
 			print "ERROR: %s\n"%cmd
 			return None
-			
-	except e:
-		print "ERROR: %s\n" % str(e)
+	except:
+		print "ERROR: GetQGISsrc\n"
 		return None	
 	
 	os.chdir(cwd)
 		
 	return qgis_src_dir
-		
 
 def GetInstallerProjectSrc(project_src_dir):
 	print "=========== \n Get NGQ installer project sources \n==========="
@@ -79,7 +88,7 @@ def GetInstallerProjectSrc(project_src_dir):
 		
 	cwd = os.getcwd()
 	os.chdir(project_src_dir)
-	
+	"""
 	try:
 		cmd = "git checkout ."
 		print "%s\n"%cmd
@@ -109,10 +118,10 @@ def GetInstallerProjectSrc(project_src_dir):
 			print "ERROR: %s\n"% cmd
 			return None
 			
-	except e:
-		print "ERROR: %s\n" % str(e)
+	except:
+		print "ERROR: GetInstallerProjectSrc\n"
 		return None	
-	
+	"""
 	os.chdir(cwd)
 		
 	return project_src_dir
@@ -137,23 +146,18 @@ def PatchQGISsrc(qgis_src_dir, patch_filename, addition_files):
 		for file in files:
 			shutil.copyfile(os.path.join(src_dir, file), os.path.join(dst_dir, file))
 
-def Configurating(qgis_src_dir, conf_env_filname, conf_qgis_filename, conf_qgis_adapter, install_dirname):
+def Configurating(qgis_src_dir, conf_env_script_filename, conf_qgis_script_filename, install_dirname):
+	#print "\t conf_env_script_filename: ", conf_env_script_filename
+	#print "\t conf_qgis_script_filename: ", conf_qgis_script_filename
+
 	qgis_build_dir = tempfile.mkdtemp('','qgis_build_')
 	
-	cmd = "%(conf_qgis_adapter)s %(qgis_build_dir)s %(conf_env_filname)s %(conf_qgis_filename)s %(qgis_src_dir)s %(install_dirname)s" % {
-		"conf_qgis_adapter": conf_qgis_adapter,
-		"qgis_build_dir": qgis_build_dir,
-		"conf_env_filname": conf_env_filname,
-		"conf_qgis_filename": conf_qgis_filename,
-		"qgis_src_dir": qgis_src_dir,
-		"install_dirname": install_dirname
-	}
-	
 	try:
-		print "cmd: ", cmd
-		subprocess.call(cmd, stdout=sys.stdout)
+		res = subprocess.check_call([conf_qgis_script_filename, qgis_build_dir, conf_env_script_filename, qgis_src_dir, install_dirname], stdout=sys.stdout)
+	except subprocess.CalledProcessError as ex:
+		sys.exit("ERROR! Configuration qgis faild: %s\n"%str(ex))
 	except:
-		print "ERROR: Configuration QGIS faild (%s). cmd:\n"%qgis_build_dir, cmd
+		sys.exit("ERROR! Configuration qgis faild: Unexpected error: %s\n"%sys.exc_info()[0])
 	
 	return qgis_build_dir
 
@@ -179,10 +183,38 @@ def AddBuildVersionInQGISconfig(qgis_config_filename, nextgis_build_number):
 	f.writelines(new_lines)
 	f.close()
 	
+	qgis_version = qgis_version + ".%d"%nextgis_build_number
+	
+	return qgis_version
+	
+def GetVersion(qgis_config_filename):
+	import re
+
+	f = open( qgis_config_filename, 'r+')
+	lines = f.readlines()
+	f.close()
+
+	qgis_version_int = 0
+	for line in lines:
+		m = re.search('^#define VERSION_INT \d+', line)
+		if m is not None:
+			m = re.search('\d+',m.group(0))
+			if m is not None:
+				qgis_version_int = int(m.group(0))
+	
+	ngq_build_number = 0
+	for line in lines:
+		m = re.search('^#define NEXTGIS_BUILD_NUMBER \d+', line)
+		if m is not None:
+			m = re.search('\d+',m.group(0))
+			if m is not None:
+				ngq_build_number = int(m.group(0))
+				
+	qgis_version = "%d.%d.%d.%d"%(qgis_version_int/10000, qgis_version_int%10000/100, qgis_version_int%100, ngq_build_number)
 	return qgis_version
 
 def Building(conf_env_filname, qgis_build_dir, project_file):
-	builder_bat = os.path.join(ngqbuilder_home_dir, "builder.bat")
+	builder_bat = os.path.join(ngqbuilder_home_dir, "scripts", "builder.bat")
 	
 	cmd = "%(builder_bat)s %(qgis_build_dir)s %(conf_env_filname)s %(project_file)s" % {
 		"builder_bat": builder_bat,
@@ -203,106 +235,109 @@ def Building(conf_env_filname, qgis_build_dir, project_file):
 	else:
 		return False
 
-def MakeInstaller(install_dirname, nsis_script, nsis_adapter, qgis_version):
-	cmd = "%(nsis_adapter)s %(install_dirname)s %(nsis_script)s %(qgis_version)s" % {
-		"nsis_adapter": nsis_adapter,
-		"install_dirname": install_dirname,
-		"nsis_script": nsis_script,
-		"qgis_version": qgis_version
-	}
-	
+def MakeInstaller(proj_name, install_dirname, nsis_script, nsis_adapter, version, platform):
+	installer_filename = "setup-" + proj_name + "-" + str(version) + "-" + platform + ".exe"
 	try:
-		print "cmd: ", cmd
-		res = subprocess.call(cmd, stdout=sys.stdout)
-		
+		res = subprocess.check_call([nsis_adapter, install_dirname, nsis_script, version, installer_filename], stdout=sys.stdout)
+	except subprocess.CalledProcessError as ex:
+		sys.exit("ERROR! Make installer error: %s\n"%str(ex))
 	except:
-		print "ERROR: Make installer. cmd:\n"% cmd
-		return False
+		sys.exit("ERROR! Make installer error: Unexpected error: %s\n"%sys.exc_info()[0])
 	
-	if res == 0:
-		return True
-	else:
-		return False
-"""
-def SendToFTPserevr():
+	return installer_filename
+
+def SendToFTPserevr(filename, ftp_server):
 	from ftplib import FTP
-	ftp = FTP('ftp.nextgis.ru')
-	ftp = FTP('nextgis.ru')
-	ftp.login('lisovenko', 'jux2Xak2')
-	ftp.cwd('qgis')
-	ftp.storbinary("STOR qgis-install.exe", open("d:\\builds\\NextGIS_QGIS_Compulink_0.0.5.exe", 'rb'))
-"""
+	
+	config_filename = os.path.join(ngqbuilder_home_dir, "ftp.ini")
+	if not os.path.exists(config_filename):
+		sys.exit("ERROR: NGQ Builder ftp config file (%s) not found"%config_filename)
+	ftp_config = ConfigParser.RawConfigParser()
+	ftp_config.read(config_filename)
+
+	try:
+		ftp = FTP(ftp_server)
+		
+		ftp.login(ftp_config.get(ftp_server,'user'), ftp_config.get(ftp_server,'pass'))
+		ftp.cwd(ftp_config.get(ftp_server,'rdir'))
+		ftp.storbinary("STOR %s"%filename, open(os.path.join(ngqbuilder_builds_dir, filename), 'rb'))
+	except:
+		sys.exit("ERROR! SendToFTPserevr: Unexpected error: %s\n"%sys.exc_info()[0])
 	
 parser = argparse.ArgumentParser(description='Script for build NextGIS QGIS')
    
 parser.add_argument('-l', '--list', action='store_true', dest='list', help='list of projects')
 parser.add_argument('-b', '--build', dest='project', help='project name for build')
+parser.add_argument('-i', '--make_installer', dest='installer', help='project name for make_installer')
+parser.add_argument('-p', '--platform', dest='platform', help='[x32|x64], default x32')
+parser.add_argument('-f', '--ftp', action='store_true', dest='ftp', help='put installer to ftp server')
 
 if len(sys.argv) <= 1:
 	parser.print_usage()
-	sys.exit()
+	sys.exit(1)
 
 args = parser.parse_args()
-print "args.list: ", args.list
-print "args.project: ", args.project
 
 if args.list:
 	print "Configurated projects:"
 	for prj_name in config.sections():
 		print "\t %s" %prj_name
 		
-	sys.exit()
+	sys.exit(0)
+
+platform = "win32"
+platform_dir_name = "win32"
+if args.platform is not None:
+	if args.platform == "x64":
+		platform = "win64"
+		platform_dir_name = "win64"
 
 if args.project is not None:
 	if  args.project not in config.sections():
 		msg = "ERROR: Project \"%s\" not found"%args.project
-		sys.exit(msg)
+		sys.exit(msg)	
 	
 	'''
 		Getsources
 	'''
 	print "Get sources..."
-	qgis_src_dir = GetQGISsrc(config.get(args.project,"qgis_tag"), config.get(args.project,"qgis_src_dir"))
-	
+	qgis_tag = config.get(args.project,"qgis_tag")
+	qgis_src_dir = config.get(args.project,"qgis_src_dir")
+	qgis_src_dir = GetQGISsrc(qgis_tag, qgis_src_dir)
 	if qgis_src_dir is None:
 		sys.exit("ERROR: getting QGIS sources")
-		
-	print "getQGISsrc: ",qgis_src_dir
 	
 	'''
 		GetProject
 	'''
 	print "Get project..."
-	project_src_dir = GetInstallerProjectSrc(config.get(args.project,"ngq_proj"))
+	ngq_proj = config.get(args.project,"ngq_proj")
+	project_src_dir = GetInstallerProjectSrc(ngq_proj)
 	
 	'''
 		Patching
 	'''
-	#patching
+	print "Patching..."
 	patch_filename = os.path.join(project_src_dir, config.get(args.project,"patch"))
 	addition_files = os.path.join(project_src_dir, config.get(args.project,"addition_files"))
-	print "Patching..."
 	PatchQGISsrc(qgis_src_dir, patch_filename, addition_files)
 	
 	'''
 		Configurating
 	'''
 	print "Configurating..."
-	conf_env_filname =  os.path.join(ngqbuilder_home_dir, config.get(args.project,"build_env"))
-	conf_qgis_filename =  os.path.join(project_src_dir, config.get(args.project,"configure_qgis"))
+	conf_env_script_name = config.get(args.project,"build_env")
+	conf_qgis_script_name = config.get(args.project,"configure_qgis")
 	
-	conf_qgis_adapters_dir = os.path.join(ngqbuilder_home_dir, "configuration")
-	conf_qgis_adapter =  os.path.join(conf_qgis_adapters_dir, config.get(args.project,"configure_qgis_adapter"))
+	conf_env_script_filename =  os.path.join(ngqbuilder_home_dir, "scripts", platform_dir_name, "env", conf_env_script_name)
+	conf_qgis_script_filename =  os.path.join(ngqbuilder_home_dir, "scripts", platform_dir_name, "configuration", conf_qgis_script_name)
 	
-	install_dirname = os.path.join(ngqbuilder_builds_dir, args.project)
+	install_dirname = os.path.join(ngqbuilder_builds_dir, args.project, platform_dir_name)
 	
-	qgis_build_dir = Configurating(qgis_src_dir, conf_env_filname, conf_qgis_filename, conf_qgis_adapter, install_dirname)
-	#qgis_build_dir = os.path.normpath("E:\\temp\\qgis_build_pqdvwd")
+	qgis_build_dir = Configurating(qgis_src_dir, conf_env_script_filename, conf_qgis_script_filename, install_dirname)
 
 	build_number = int( config.get(args.project,"build_number") ) + 1
-	qgis_version = AddBuildVersionInQGISconfig( os.path.join(qgis_build_dir, "qgsconfig.h"), build_number)
-	qgis_version = str(qgis_version) + "." + str(build_number)
-	#qgis_version = 12345567
+	AddBuildVersionInQGISconfig( os.path.join(qgis_build_dir, "qgsconfig.h"), build_number)
 	
 	'''
 		Building
@@ -315,25 +350,34 @@ if args.project is not None:
     
 	if project_file is None:
 		sys.exit("ERROR: MS project not found in directory: %s"%qgis_build_dir)
-		
-	print "\tFound project: ", project_file
 	
-	res = Building(conf_env_filname, qgis_build_dir, project_file)
+	res = Building(conf_env_script_filename, qgis_build_dir, project_file)
 	if res == False:
 		sys.exit("ERROR: NSIS error")
 	
+	'''
+		Save build number
+	'''
 	config.set(args.project, "build_number", build_number)
 	
 	with open(config_filename, 'wb') as configfile:
 		config.write(configfile)
-		
+
+	'''
+		Remove tmp files
+	'''
+	shutil.rmtree(qgis_build_dir)
+	
+if args.installer is not None:	
 	'''
 		Make installer
 	'''
 	print "Make installer..."
-	nsis_script =  os.path.join(project_src_dir, config.get(args.project,"nsis"))
-	nsis_adapters_dir = os.path.join(ngqbuilder_home_dir, "nsis")
-	nsis_adapter =  os.path.join(nsis_adapters_dir, config.get(args.project,"nsis_adapter"))
+	ngq_proj = config.get(args.installer,"ngq_proj")
+	project_src_dir = GetInstallerProjectSrc(ngq_proj)
+	
+	nsis_script =  os.path.join(project_src_dir, config.get(args.installer,"nsis"))
+	nsis_adapter =  os.path.join(ngqbuilder_home_dir, "scripts", platform_dir_name , "nsis", config.get(args.installer,"nsis_adapter"))
 	
 	if not os.path.exists(nsis_script):
 		msg = "ERROR: NSIS script (%s) not found in project directory (%s)"%(nsis_script, project_src_dir)
@@ -342,9 +386,18 @@ if args.project is not None:
 		msg = "ERROR: NSIS adapter (%s) not found"%(nsis_adapter)
 		sys.exit(msg)
 	
-	res = MakeInstaller(install_dirname, nsis_script, nsis_adapter, qgis_version)
+	install_dirname = os.path.join(ngqbuilder_builds_dir, args.installer, platform_dir_name)
 	
-	if res == False:
+	nextgisqgis_version = GetVersion(os.path.join(os.path.join(install_dirname, "include"), "qgsconfig.h" ))
+	
+	installer_filename = MakeInstaller(args.installer, install_dirname, nsis_script, nsis_adapter, nextgisqgis_version, platform)
+	
+	if installer_filename is None:
 		sys.exit("ERROR: NSIS error")
-		
-	shutil.rmtree(qgis_build_dir)
+	
+	if args.ftp:
+		'''
+			Put by FTP 
+		'''
+		print "Put by FTP"
+		SendToFTPserevr(installer_filename, config.get(args.installer, "fpt_server"))

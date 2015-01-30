@@ -10,7 +10,7 @@ makensis.exe ^
 /DSAGA_SRC_DIR="E:\builds\env\osgeo4w-saga" ^
 /DINSTALLER_DST_DIR=%NGQBUILDER_BUILDS_DIR% ^
 /DPROGRAM_VERSION=%3 ^
-/DPLUGINS="e:\builds\qgis-plugins\identifyplus" ^
+/DPLUGINS="e:\builds\qgis-plugins\4compulink\quick_map_services e:\builds\qgis-plugins\4compulink\openlayers_plugin e:\builds\qgis-plugins\identifyplus e:\builds\qgis-plugins\compulink_tools" ^
 /DQGIS_MANUAL_FILE_NAME_RU="QGIS-2.6-UserGuide-ru.pdf" ^
 /DQGIS_MANUAL_FILE_NAME_EN="QGIS-2.6-UserGuide-en.pdf" ^
 %2

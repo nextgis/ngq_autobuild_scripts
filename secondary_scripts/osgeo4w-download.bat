@@ -17,6 +17,8 @@ osgeo4w-setup-x86.exe --local-package-dir .\osgeo4w-env --download ^
 -P python-qscintilla ^
 -P psycopg2 ^
 -P oci ^
+-P oci-devel ^
+-P python-devel ^
 -P osg-dev ^
 -P osg-libs ^
 -P osgearth-dev ^
